@@ -1,0 +1,10 @@
+[package]
+name = "egui_im"
+authors = ["Vladimir Shardinov <vvshard@gmail.com>"]
+license = "MIT"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eframe = "0.22.0"
+methods-enum = "0.3"
