@@ -8,7 +8,7 @@ fn main() -> Result<(), eframe::Error> {
     };
 
     eframe::run_native(
-        "User attention test",
+        "Music player",
         options,
         Box::new(|_cc| Box::new(player::Player::default())),
     )
@@ -34,8 +34,8 @@ mod player {
             Self {
                 state: State::Stopped,
                 playlist: vec![
-                    Track::new("Track 1", 25),
-                    Track::new("Track 2", 15),
+                    Track::new("Track 1", 45),
+                    Track::new("Track 2", 65),
                     Track::new("Track 3", 195),
                     Track::new("Track 4", 105),
                 ],
@@ -57,7 +57,7 @@ mod player {
             egui::CentralPanel::default().show(ctx, |ui| {
                 self.tick(ctx);
                 ui.label(self.status_title());
-                let (dur, s_dur) = (self.track().duration, self.s_dur());
+                let (dur, s_dur) = (self.track().duration, self.s_duration());
                 ui.add(egui::Slider::new(self.cursor(), 0..=dur).text(s_dur).trailing_fill(true));
                 ui.horizontal(|ui| {
                     let button_pp = Button::new(self.bt_pp_title()).min_size(egui::vec2(54., 1.));
@@ -75,26 +75,31 @@ mod player {
     methods_enum::impl_match! {
     impl Player {
         pub fn status_title(&self) -> String    ~{ match self.state }
-        pub fn s_dur(&self) -> String           ~{ match self.state { String::new() } }
-        pub fn bt_pp_title(&self) -> &str       ~{ match self.state { "Play ⏵" } }
-        pub fn play_pause(&mut self)            ~{ match self.state { self.play() } }
-        pub fn stop(&mut self)                  ~{ match self.state { self.set_back() } }
+        pub fn s_duration(&self) -> String      ~{ match self.state { String::new() } }
+        pub fn bt_pp_title(&self) -> &str       ~{ match self.state }
+        pub fn play_pause(&mut self)            ~{ match self.state }
+        pub fn stop(&mut self)                  ~{ match self.state {} }
         pub fn tick(&mut self, ctx: &Context)   ~{ match self.state {} }
     }
     enum State {
         Stopped:
             status_title()  { "Stopped ⏹ : Press 'Play'".to_string() }
-            stop()          {}
+            bt_pp_title()   { "Play ⏵" }
+            play_pause()    { self.play() }
         ,
         Paused:
             status_title()  { format!("Paused ⏸ : {}", self.track().title) }
-            s_dur()         { format!("/ {} sec", self.track().duration) }
+            bt_pp_title()   { "Play ⏵" }
+            play_pause()    { self.play() }
+            s_duration()    { format!("/ {} sec", self.track().duration) }
+            stop()          { self.set_back() }
         ,
         Playing
             status_title()  { format!("Playing ⏵: {}", self.track().title) }
-            s_dur()         { format!("/ {} sec", self.track().duration) }
             bt_pp_title()   { "Pause ⏸" }
             play_pause()    { self.state = State::Paused }
+            s_duration()    { format!("/ {} sec", self.track().duration) }
+            stop()          { self.set_back() }
             tick(ctx)       {
                 if Instant::now() > self.instant {
                     self.instant += Duration::from_secs(1);
