@@ -1,11 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use eframe::egui;
+use eframe::egui::{self, widgets::Widget, Button};
 use player::Player;
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
-        initial_window_size: Some(egui::vec2(250.0, 80.0)),
+        initial_window_size: Some(egui::vec2(250., 80.)),
+        resizable: false,
         ..Default::default()
     };
 
@@ -13,24 +14,28 @@ fn main() -> Result<(), eframe::Error> {
 
     eframe::run_simple_native("Music player", options, move |ctx, _frame| {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label(player.status_title());
-            let (duration, s_dur) = (player.track().duration, player.s_dur().to_string());
-            ui.add(egui::Slider::new(player.cursor(), 0..=duration).text(s_dur));
+            ui.label(player.status_title(ctx));
+            let (dur, s_dur) = (player.track().duration, player.s_dur());
+            ui.add(egui::Slider::new(player.cursor(), 0..=dur).text(s_dur).trailing_fill(true));
             ui.horizontal(|ui| {
-                player.button(ui, "Play/Pause", Player::play_pause);
-                player.button(ui, "Stop", Player::stop);
-                player.button(ui, "Prev", Player::prev);
-                player.button(ui, "Next", Player::next);
+                let button_pp = Button::new(player.bt_pp_title()).min_size(egui::vec2(54., 1.));
+                if button_pp.ui(ui).clicked() {
+                    player.play_pause();
+                }
+                player.button(ui, "Stop ⏹", Player::stop);
+                player.button(ui, "⏮ Prev", Player::prev);
+                player.button(ui, "Next ⏭", Player::next);
             })
         });
     })
 }
 
 mod player {
-    use eframe::egui::Ui;
+    use eframe::egui::{Ui, Context};
+    use std::time::{Duration, Instant};
 
     pub struct Track {
-        pub title: String,
+        title: String,
         pub duration: u32,
         cursor: u32,
     }
@@ -40,61 +45,70 @@ mod player {
         }
     }
 
+    impl Default for Player {
+        fn default() -> Self {
+            Self {
+                state: State::Stopped,
+                playlist: vec![
+                    Track::new("Track 1", 25),
+                    Track::new("Track 2", 15),
+                    Track::new("Track 3", 195),
+                    Track::new("Track 4", 105),
+                ],
+                current_track: 0,
+                tick: Instant::now(),
+            }
+        }
+    }
+
     pub struct Player {
         state: State,
         playlist: Vec<Track>,
         current_track: usize,
-        cursor0: u32,
-    }
-
-    impl Default for Player {
-        fn default() -> Self {
-            let playlist = vec![
-                Track::new("Track 1", 180),
-                Track::new("Track 2", 165),
-                Track::new("Track 3", 197),
-                Track::new("Track 4", 205),
-            ];
-            Self { state: State::Stopped, playlist, current_track: 0, cursor0: 0 }
-        }
+        tick: Instant,
     }
 
     methods_enum::impl_match! {
     impl Player {
-        pub fn status_title(&self) -> String    ~{ match self.state }
-        pub fn cursor(&mut self) -> &mut u32    ~{ match self.state { self.cursor_mut() } }
-        pub fn pp_title(&self) -> &str          ~{ match self.state { "Play ▶" } }
-        pub fn s_dur(&self) -> String           ~{ match self.state { 
-                                                    format!("/ {} sec", self.track().duration) } }
+        pub fn status_title(&self, ctx: &Context) -> String    ~{ match self.state }
+        pub fn s_dur(&self) -> String           ~{ match self.state { String::new() } }
+        pub fn bt_pp_title(&self) -> &str       ~{ match self.state { "Play ⏵" } }
+        pub fn cursor(&mut self) -> &mut u32    ~{ match self.state {}; self.cursor_mut() }
         pub fn play_pause(&mut self)            ~{ match self.state { self.play() } }
         pub fn stop(&mut self)                  ~{ match self.state { self.set_back() } }
     }
-    
     enum State {
         Stopped:
-            status_title()  { "Stopped ■ : Press 'Play'".to_string() }
-            s_dur()         { String::new() }
-            cursor()        { &mut self.cursor0 }
+            status_title()  { "Stopped ⏹ : Press 'Play'".to_string() }
             stop()          {}
         ,
         Paused:
-            status_title()  { format!("Paused || : {}", self.track().title) }
+            status_title()  { format!("Paused ⏸ : {}", self.track().title) }
+            s_dur()         { format!("/ {} sec", self.track().duration) }
         ,
         Playing
-            status_title()  { format!("Playing > : {}", self.track().title) } 
-            pp_title()      { "Pause ||" }
-            play_pause() {
-                self.pause();
-                self.state = State::Paused
+            status_title()  { ctx.request_repaint_after(Duration::from_millis(500)); format!("Playing ⏵: {}", self.track().title) }
+            s_dur()         { format!("/ {} sec", self.track().duration) }
+            bt_pp_title()   { "Pause ⏸" }
+            play_pause()    { self.state = State::Paused }
+            cursor(ctx)        {
+                if Instant::now() > self.tick {
+                    self.tick += Duration::from_secs(1);
+                    *self.cursor_mut() += 1;
+                    
+                }
+                if *self.cursor_mut() > self.track().duration {
+                    *self.cursor_mut() = 0;
+                    self.next();
+                }
             }
     }
     } // <-- impl_match!
 
     impl Player {
-        pub fn button(&mut self, ui: &mut Ui, title: &str, hndl: fn(&mut Self)) {
-            let title = if title == "Play/Pause" { self.pp_title() } else { title };
+        pub fn button(&mut self, ui: &mut Ui, title: &str, handler: fn(&mut Self)) {
             if ui.button(title).clicked() {
-                hndl(self);
+                handler(self);
             }
         }
 
@@ -107,16 +121,11 @@ mod player {
         }
 
         fn play(&mut self) {
-            *self.cursor_mut() = 10; // Playback imitation.
+            self.tick = Instant::now() + Duration::from_secs(1);
             self.state = State::Playing;
         }
 
-        fn pause(&mut self) {
-            *self.cursor_mut() = 40; // Paused imitation.
-        }
-
         fn set_back(&mut self) {
-            self.pause();
             *self.cursor_mut() = 0;
             self.state = State::Stopped
         }
