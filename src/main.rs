@@ -7,11 +7,7 @@ fn main() -> Result<(), eframe::Error> {
         ..Default::default()
     };
 
-    eframe::run_native(
-        "Music player",
-        options,
-        Box::new(|_cc| Box::new(player::Player::default())),
-    )
+    eframe::run_native("Music player", options, Box::new(|_cc| Box::new(player::Player::default())))
 }
 
 mod player {
@@ -58,7 +54,10 @@ mod player {
                 self.tick(ctx);
                 ui.label(self.status_title());
                 let (dur, s_dur) = (self.track().duration, self.s_duration());
-                ui.add(egui::Slider::new(self.cursor(), 0..=dur).text(s_dur).trailing_fill(true));
+                ui.add_enabled(
+                    !matches!(self.state, State::Stopped),
+                    egui::Slider::new(self.cursor(), 0..=dur).text(s_dur).trailing_fill(true),
+                );
                 ui.horizontal(|ui| {
                     let button_pp = Button::new(self.bt_pp_title()).min_size(egui::vec2(54., 1.));
                     if button_pp.ui(ui).clicked() {
