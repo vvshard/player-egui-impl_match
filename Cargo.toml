@@ -1,5 +1,5 @@
 [package]
-name = "egui_im"
+name = "player-egui-impl_match"
 authors = ["Vladimir Shardinov <vvshard@gmail.com>"]
 license = "MIT"
 version = "0.1.0"
