@@ -42,7 +42,7 @@ impl eframe::App for Player {
         let enabl = !matches!(self.state, State::Stopped);
         let d = self.track().duration;
         let sd = if enabl { format!("/ {d} sec") } else { String::new() };
-        
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.label(self.status_title());
             ui.add_enabled(enabl, Slider::new(self.cursor(), 0..=d).text(sd).trailing_fill(true));
@@ -70,32 +70,36 @@ enum State {
     Stopped:
         status_title()  { "Stopped ⏹ : Press 'Play'".to_string() }
         bt_pp_title()   { "Play ⏵" }
-        play_pause()    { self.state = State::Playing(Instant::now()) }
+        play_pause()    { self.state = State::Playing(None) }
     ,
     Paused:
         status_title()  { format!("Paused ⏸ : {}", self.track().title) }
         bt_pp_title()   { "Play ⏵" }
-        play_pause()    { self.state = State::Playing(Instant::now()) }
+        play_pause()    { self.state = State::Playing(None) }
     ,
-    Playing(Instant):
+    Playing(Option<Instant>):
         status_title()  { format!("Playing ⏵: {}", self.track().title) }
         bt_pp_title()   { "Pause ⏸" }
-        play_pause()    { self.state = State::Paused } 
-        (instant):
+        play_pause()    { self.state = State::Paused }
+        (opt_instant):
         tick(ctx) {
-            if Instant::now() > instant {
-                self.state = State::Playing(instant + Duration::from_secs(1));
-                *self.cursor() += 1;
-                if *self.cursor() > self.track().duration {
-                    *self.cursor() = 0;
-                    self.next();
+            self.state = match opt_instant {
+                Some(limit) if Instant::now() < limit => return,
+                Some(limit) => {
+                    *self.cursor() += 1;
+                    if *self.cursor() > self.track().duration {
+                        *self.cursor() = 0;
+                        self.next();
+                    }
+                    State::Playing(Some(limit + Duration::from_secs(1)))
                 }
-                let ctx = ctx.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(Duration::from_secs(1));
-                    ctx.request_repaint();
-                });
-            }
+                None => State::Playing(Some(Instant::now() + Duration::from_secs(1))),
+            };
+            let ctx = ctx.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_secs(1));
+                ctx.request_repaint();
+            });
         }
 }
 } // <-- impl_match!
