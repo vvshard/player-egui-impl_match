@@ -34,7 +34,6 @@ pub struct Player {
     state: State,
     playlist: Vec<Track>,
     current_track: usize,
-    instant: Instant,
 }
 
 impl eframe::App for Player {
@@ -71,24 +70,21 @@ enum State {
     Stopped:
         status_title()  { "Stopped ⏹ : Press 'Play'".to_string() }
         bt_pp_title()   { "Play ⏵" }
-        play_pause() {
-            self.instant = Instant::now();
-            self.state = State::Playing
-        },
+        play_pause()    { self.state = State::Playing(Instant::now()) }
+    ,
     Paused:
         status_title()  { format!("Paused ⏸ : {}", self.track().title) }
         bt_pp_title()   { "Play ⏵" }
-        play_pause() {
-            self.instant = Instant::now();
-            self.state = State::Playing
-        },
-    Playing:
+        play_pause()    { self.state = State::Playing(Instant::now()) }
+    ,
+    Playing(Instant):
         status_title()  { format!("Playing ⏵: {}", self.track().title) }
         bt_pp_title()   { "Pause ⏸" }
-        play_pause()    { self.state = State::Paused }
+        play_pause()    { self.state = State::Paused } 
+        (instant):
         tick(ctx) {
-            if Instant::now() > self.instant {
-                self.instant += Duration::from_secs(1);
+            if Instant::now() > instant {
+                self.state = State::Playing(instant + Duration::from_secs(1));
                 *self.cursor() += 1;
                 if *self.cursor() > self.track().duration {
                     *self.cursor() = 0;
@@ -106,7 +102,7 @@ enum State {
 
 impl Player {
     pub fn new(playlist: Vec<Track>) -> Self {
-        Self { state: State::Stopped, playlist, current_track: 0, instant: Instant::now() }
+        Self { state: State::Stopped, playlist, current_track: 0 }
     }
 
     fn button(&mut self, ui: &mut Ui, title: &str, handler: fn(&mut Self), enabl: bool) {
