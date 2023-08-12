@@ -49,10 +49,15 @@ impl eframe::App for Player {
 
 methods_enum::impl_match! {
 impl Player {
-    fn status_title(&self) -> String        ~{ match self.state }
-    fn bt_pp_text(&self) -> &'static str    ~{ match self.state { "Play ⏵" } }
-    fn play_pause(&mut self)                ~{ match self.state { self.play() } }
-    fn tick(&mut self, ctx: &Context)       ~{ match self.state {} }
+    fn status_title(&self) -> String     ~{ match self.state }
+    fn bt_pp_text(&self) -> &'static str ~{ match self.state { "Play ⏵" } }
+    fn play_pause(&mut self)             ~{ match self.state { self.state = State::Playing(None) } }
+    fn tick(&mut self, ctx: &Context)    ~{ match self.state {} }
+
+    fn stop(&mut self) {
+        *self.cursor() = 0;
+        self.state = State::Stopped
+    }
 }
 enum State {
     Stopped:
@@ -64,7 +69,7 @@ enum State {
     Playing(Option<Instant>):
         status_title()  { format!("Playing ⏵: {}", self.track().title) }
         bt_pp_text()    { "Pause ⏸" }
-        play_pause()    { self.pause() }
+        play_pause()    { self.state = State::Paused }
         (opt_instant):
         tick(ctx) {
             self.state = match opt_instant {
@@ -88,14 +93,8 @@ enum State {
 }
 } // <-- impl_match!
 
+// stateless methods and player-associated functions
 impl Player {
-    pub fn new<T: ToString>(playlist: &[(T, u32)]) -> Self {
-        let playlist = (playlist.iter())
-            .map(|(t, d)| Track { title: t.to_string(), duration: *d, cursor: 0 })
-            .collect();
-        Self { state: State::Stopped, playlist, current_track: 0 }
-    }
-
     fn button(&mut self, ui: &mut Ui, text: &str, handler: fn(&mut Self), enabl: bool) {
         if ui.add_enabled(enabl, Button::new(text).min_size(egui::vec2(54., 1.))).clicked() {
             handler(self);
@@ -110,24 +109,18 @@ impl Player {
         &mut self.playlist[self.current_track].cursor
     }
 
-    fn play(&mut self) {
-        self.state = State::Playing(None)
-    }
-
-    fn pause(&mut self) {
-        self.state = State::Paused
-    }
-
-    fn stop(&mut self) {
-        *self.cursor() = 0;
-        self.state = State::Stopped
-    }
-
     fn prev(&mut self) {
-        self.current_track = (self.playlist.len() + self.current_track - 1) % self.playlist.len();
+        self.current_track = self.current_track.wrapping_sub(1).min(self.playlist.len() - 1);
     }
 
     fn next(&mut self) {
         self.current_track = (self.current_track + 1) % self.playlist.len();
+    }
+
+    pub fn new<T: ToString>(playlist: &[(T, u32)]) -> Self {
+        let playlist = (playlist.iter())
+            .map(|(t, d)| Track { title: t.to_string(), duration: *d, cursor: 0 })
+            .collect();
+        Self { state: State::Stopped, playlist, current_track: 0 }
     }
 }
